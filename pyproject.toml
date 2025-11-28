@@ -1,0 +1,18 @@
+[project]
+name = "auto-apply"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "boto3>=1.41.5",
+    "fastapi>=0.122.0",
+    "python-dotenv>=1.2.1",
+    "python-multipart>=0.0.20",
+    "uvicorn>=0.38.0",
+    "streamlit>=1.28.0",
+    "requests>=2.31.0",
+    "pymongo>=4.6.0",
+    "pdfplumber>=0.10.0",
+    "google-generativeai>=0.3.0",
+]
