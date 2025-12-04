@@ -5,7 +5,7 @@ from io import BytesIO
 
 # Page configuration
 st.set_page_config(
-    page_title="Resume Upload Service",
+    page_title="Auto Apply",
     page_icon="📄",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -63,14 +63,21 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📋 Navigation")
     
-    # Page selection
-    page = st.radio(
+    # Initialize page in session state
+    if 'page' not in st.session_state:
+        st.session_state.page = "🏠 Home"
+    
+    # Page selection - controlled by session state
+    # Don't capture the return value to avoid conflicts with button navigation
+    st.radio(
         "Select Page",
         ["🏠 Home", "📤 Upload Resume"],
-        label_visibility="collapsed"
+        index=0 if st.session_state.page == "🏠 Home" else 1,
+        label_visibility="collapsed",
+        key="nav_radio",
+        on_change=lambda: st.session_state.update(page=st.session_state.nav_radio)
     )
-
-
+    
 def format_file_size(size_bytes):
     """Format file size in human readable format"""
     if size_bytes < 1024:
@@ -95,7 +102,7 @@ def format_date(date_str):
 
 def display_homepage():
     """Display homepage with list of resumes"""
-    st.markdown('<h1 class="main-header">📄 Resume Upload Service</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">📄 Auto Apply</h1>', unsafe_allow_html=True)
     st.markdown("### 🏠 Home - Uploaded Resumes")
     
     # Fetch resumes from API
@@ -115,7 +122,7 @@ def display_homepage():
                 st.info("📭 No resumes uploaded yet. Go to the Upload page to upload your first resume!")
                 st.markdown("---")
                 if st.button("📤 Go to Upload Page", use_container_width=True):
-                    st.session_state.page = "upload"
+                    st.session_state.page = "📤 Upload Resume"
                     st.rerun()
             else:
                 st.success(f"✅ Found {count} resume(s)")
@@ -133,8 +140,8 @@ def display_homepage():
                         st.session_state[delete_key] = False
                     
                     # Profile data is now integrated in the resume document
-                    # Check if profile fields exist in the resume document
-                    has_profile = resume.get('email') is not None
+                    # Always show edit option - even if profile is empty, user can add data
+                    has_profile = resume.get('email') is not None or resume.get('name') is not None
                     
                     with st.container():
                         # Resume header row
@@ -275,27 +282,95 @@ def display_homepage():
                                 if s3_url:
                                     st.text(f"**S3 URL:**\n{s3_url}")
                             
-                            # User Profile details if available (now integrated in resume document)
-                            if has_profile:
-                                st.markdown("---")
-                                
-                                # Edit mode toggle
-                                edit_key = f"edit_mode_{resume_id}"
-                                if edit_key not in st.session_state:
-                                    st.session_state[edit_key] = False
-                                
-                                col_header, col_edit = st.columns([3, 1])
-                                with col_header:
+                            # User Profile section - always show edit option
+                            st.markdown("---")
+                            
+                            # Edit mode toggle
+                            edit_key = f"edit_mode_{resume_id}"
+                            if edit_key not in st.session_state:
+                                st.session_state[edit_key] = False
+                            
+                            col_header, col_edit = st.columns([3, 1])
+                            with col_header:
+                                if has_profile:
                                     st.markdown("#### 👤 User Profile")
-                                with col_edit:
-                                    if st.button("✏️ Edit" if not st.session_state[edit_key] else "👁️ View", 
-                                               key=f"toggle_edit_{resume_id}", use_container_width=True):
-                                        st.session_state[edit_key] = not st.session_state[edit_key]
+                                else:
+                                    st.markdown("#### 👤 User Profile")
+                                    st.caption("No profile data found. Click Edit to add information.")
+                            with col_edit:
+                                if st.button("✏️ Edit" if not st.session_state[edit_key] else "👁️ View", 
+                                           key=f"toggle_edit_{resume_id}", use_container_width=True):
+                                    st.session_state[edit_key] = not st.session_state[edit_key]
+                                    st.rerun()
+                            
+                            if st.session_state[edit_key]:
+                                # EDIT MODE - Form fields
+                                # Initialize session state for entry counts
+                                exp_count_key = f"exp_count_{resume_id}"
+                                edu_count_key = f"edu_count_{resume_id}"
+                                proj_count_key = f"proj_count_{resume_id}"
+                                cert_count_key = f"cert_count_{resume_id}"
+                                award_count_key = f"award_count_{resume_id}"
+                                pub_count_key = f"pub_count_{resume_id}"
+                                vol_count_key = f"vol_count_{resume_id}"
+                                lead_count_key = f"lead_count_{resume_id}"
+                                
+                                # Initialize counts if not set
+                                if exp_count_key not in st.session_state:
+                                    st.session_state[exp_count_key] = max(len(resume.get('experience', [])), 1)
+                                if edu_count_key not in st.session_state:
+                                    st.session_state[edu_count_key] = max(len(resume.get('education', [])), 1)
+                                if proj_count_key not in st.session_state:
+                                    st.session_state[proj_count_key] = max(len(resume.get('projects', [])), 1)
+                                if cert_count_key not in st.session_state:
+                                    st.session_state[cert_count_key] = max(len(resume.get('certifications', [])), 1)
+                                if award_count_key not in st.session_state:
+                                    st.session_state[award_count_key] = max(len(resume.get('awards', [])), 1)
+                                if pub_count_key not in st.session_state:
+                                    st.session_state[pub_count_key] = max(len(resume.get('publications', [])), 1)
+                                if vol_count_key not in st.session_state:
+                                    st.session_state[vol_count_key] = max(len(resume.get('volunteer_work', [])), 1)
+                                if lead_count_key not in st.session_state:
+                                    st.session_state[lead_count_key] = max(len(resume.get('leadership', [])), 1)
+                                
+                                # Add buttons outside form
+                                col_add1, col_add2, col_add3, col_add4 = st.columns(4)
+                                with col_add1:
+                                    if st.button("➕ Add Experience", key=f"add_exp_{resume_id}"):
+                                        st.session_state[exp_count_key] += 1
+                                        st.rerun()
+                                with col_add2:
+                                    if st.button("➕ Add Education", key=f"add_edu_{resume_id}"):
+                                        st.session_state[edu_count_key] += 1
+                                        st.rerun()
+                                with col_add3:
+                                    if st.button("➕ Add Project", key=f"add_proj_{resume_id}"):
+                                        st.session_state[proj_count_key] += 1
+                                        st.rerun()
+                                with col_add4:
+                                    if st.button("➕ Add Certification", key=f"add_cert_{resume_id}"):
+                                        st.session_state[cert_count_key] += 1
                                         st.rerun()
                                 
-                                if st.session_state[edit_key]:
-                                    # EDIT MODE - Form fields
-                                    with st.form(key=f"edit_form_{resume_id}"):
+                                col_add5, col_add6, col_add7, col_add8 = st.columns(4)
+                                with col_add5:
+                                    if st.button("➕ Add Award", key=f"add_award_{resume_id}"):
+                                        st.session_state[award_count_key] += 1
+                                        st.rerun()
+                                with col_add6:
+                                    if st.button("➕ Add Publication", key=f"add_pub_{resume_id}"):
+                                        st.session_state[pub_count_key] += 1
+                                        st.rerun()
+                                with col_add7:
+                                    if st.button("➕ Add Volunteer", key=f"add_vol_{resume_id}"):
+                                        st.session_state[vol_count_key] += 1
+                                        st.rerun()
+                                with col_add8:
+                                    if st.button("➕ Add Leadership", key=f"add_lead_{resume_id}"):
+                                        st.session_state[lead_count_key] += 1
+                                        st.rerun()
+                                
+                                with st.form(key=f"edit_form_{resume_id}"):
                                         st.markdown("##### Personal Information")
                                         col_p1, col_p2 = st.columns(2)
                                         
@@ -330,10 +405,14 @@ def display_homepage():
                                         # Experience
                                         st.markdown("##### Work Experience")
                                         experience = resume.get('experience', [])
-                                        if not experience:
-                                            experience = [{}]
+                                        exp_count = st.session_state[exp_count_key]
                                         
-                                        for i, exp in enumerate(experience):
+                                        # Ensure we have enough entries
+                                        while len(experience) < exp_count:
+                                            experience.append({})
+                                        
+                                        for i in range(exp_count):
+                                            exp = experience[i] if i < len(experience) else {}
                                             with st.expander(f"Experience {i+1}", expanded=i==0):
                                                 exp_title = st.text_input("Title", value=exp.get('title', ''), key=f"exp_title_{resume_id}_{i}")
                                                 exp_company = st.text_input("Company", value=exp.get('company', ''), key=f"exp_company_{resume_id}_{i}")
@@ -345,23 +424,32 @@ def display_homepage():
                                         # Education
                                         st.markdown("##### Education")
                                         education = resume.get('education', [])
-                                        if not education:
-                                            education = [{}]
+                                        edu_count = st.session_state[edu_count_key]
                                         
-                                        for i, edu in enumerate(education):
+                                        # Ensure we have enough entries
+                                        while len(education) < edu_count:
+                                            education.append({})
+                                        
+                                        for i in range(edu_count):
+                                            edu = education[i] if i < len(education) else {}
                                             with st.expander(f"Education {i+1}", expanded=i==0):
                                                 edu_degree = st.text_input("Degree", value=edu.get('degree', ''), key=f"edu_degree_{resume_id}_{i}")
                                                 edu_institution = st.text_input("Institution", value=edu.get('institution', ''), key=f"edu_institution_{resume_id}_{i}")
                                                 edu_field = st.text_input("Field of Study", value=edu.get('field', ''), key=f"edu_field_{resume_id}_{i}")
                                                 edu_year = st.text_input("Year", value=edu.get('year', ''), key=f"edu_year_{resume_id}_{i}")
+                                                edu_cgpa = st.text_input("CGPA/GPA", value=edu.get('gpa', '') or edu.get('cgpa', ''), key=f"edu_cgpa_{resume_id}_{i}")
                                         
                                         # Projects
                                         st.markdown("##### Projects")
                                         projects = resume.get('projects', [])
-                                        if not projects:
-                                            projects = [{}]
+                                        proj_count = st.session_state[proj_count_key]
                                         
-                                        for i, proj in enumerate(projects):
+                                        # Ensure we have enough entries
+                                        while len(projects) < proj_count:
+                                            projects.append({})
+                                        
+                                        for i in range(proj_count):
+                                            proj = projects[i] if i < len(projects) else {}
                                             with st.expander(f"Project {i+1}", expanded=i==0):
                                                 proj_name = st.text_input("Project Name", value=proj.get('name', ''), key=f"proj_name_{resume_id}_{i}")
                                                 proj_desc = st.text_area("Description", value=proj.get('description', ''), 
@@ -371,14 +459,104 @@ def display_homepage():
                                         # Certifications
                                         st.markdown("##### Certifications")
                                         certifications = resume.get('certifications', [])
-                                        if not certifications:
-                                            certifications = [{}]
+                                        cert_count = st.session_state[cert_count_key]
                                         
-                                        for i, cert in enumerate(certifications):
+                                        # Ensure we have enough entries
+                                        while len(certifications) < cert_count:
+                                            certifications.append({})
+                                        
+                                        for i in range(cert_count):
+                                            cert = certifications[i] if i < len(certifications) else {}
                                             with st.expander(f"Certification {i+1}", expanded=i==0):
                                                 cert_name = st.text_input("Certification Name", value=cert.get('name', ''), key=f"cert_name_{resume_id}_{i}")
                                                 cert_org = st.text_input("Issuing Organization", value=cert.get('organization', ''), key=f"cert_org_{resume_id}_{i}")
                                                 cert_date = st.text_input("Date", value=cert.get('date', ''), key=f"cert_date_{resume_id}_{i}")
+                                        
+                                        # Awards
+                                        st.markdown("##### Awards & Honors")
+                                        awards = resume.get('awards', [])
+                                        award_count = st.session_state[award_count_key]
+                                        
+                                        # Ensure we have enough entries
+                                        while len(awards) < award_count:
+                                            awards.append("")
+                                        
+                                        for i in range(award_count):
+                                            award = awards[i] if i < len(awards) else ""
+                                            award_text = award if isinstance(award, str) else award.get('name', '') if isinstance(award, dict) else ""
+                                            st.text_input(f"Award {i+1}", value=award_text, key=f"award_{resume_id}_{i}")
+                                        
+                                        # Publications
+                                        st.markdown("##### Publications")
+                                        publications = resume.get('publications', [])
+                                        pub_count = st.session_state[pub_count_key]
+                                        
+                                        # Ensure we have enough entries
+                                        while len(publications) < pub_count:
+                                            publications.append({})
+                                        
+                                        for i in range(pub_count):
+                                            pub = publications[i] if i < len(publications) else {}
+                                            with st.expander(f"Publication {i+1}", expanded=i==0):
+                                                pub_title = st.text_input("Title", value=pub.get('title', '') if isinstance(pub, dict) else (pub if isinstance(pub, str) else ''), key=f"pub_title_{resume_id}_{i}")
+                                                pub_authors = st.text_input("Authors", value=pub.get('authors', '') if isinstance(pub, dict) else '', key=f"pub_authors_{resume_id}_{i}")
+                                                pub_venue = st.text_input("Venue", value=pub.get('venue', '') if isinstance(pub, dict) else '', key=f"pub_venue_{resume_id}_{i}")
+                                                pub_date = st.text_input("Date", value=pub.get('date', '') if isinstance(pub, dict) else '', key=f"pub_date_{resume_id}_{i}")
+                                                pub_url = st.text_input("URL/DOI", value=pub.get('url', '') if isinstance(pub, dict) else '', key=f"pub_url_{resume_id}_{i}")
+                                        
+                                        # Volunteer Work
+                                        st.markdown("##### Volunteer Work")
+                                        volunteer_work = resume.get('volunteer_work', [])
+                                        vol_count = st.session_state[vol_count_key]
+                                        
+                                        # Ensure we have enough entries
+                                        while len(volunteer_work) < vol_count:
+                                            volunteer_work.append({})
+                                        
+                                        for i in range(vol_count):
+                                            vol = volunteer_work[i] if i < len(volunteer_work) else {}
+                                            with st.expander(f"Volunteer Work {i+1}", expanded=i==0):
+                                                vol_org = st.text_input("Organization", value=vol.get('organization', ''), key=f"vol_org_{resume_id}_{i}")
+                                                vol_role = st.text_input("Role", value=vol.get('role', ''), key=f"vol_role_{resume_id}_{i}")
+                                                vol_location = st.text_input("Location", value=vol.get('location', ''), key=f"vol_location_{resume_id}_{i}")
+                                                vol_start = st.text_input("Start Date", value=vol.get('start_date', ''), key=f"vol_start_{resume_id}_{i}")
+                                                vol_end = st.text_input("End Date", value=vol.get('end_date', ''), key=f"vol_end_{resume_id}_{i}")
+                                                vol_desc = st.text_area("Description", value=vol.get('description', ''), 
+                                                                        height=60, key=f"vol_desc_{resume_id}_{i}")
+                                        
+                                        # Leadership
+                                        st.markdown("##### Leadership")
+                                        leadership = resume.get('leadership', [])
+                                        lead_count = st.session_state[lead_count_key]
+                                        
+                                        # Ensure we have enough entries
+                                        while len(leadership) < lead_count:
+                                            leadership.append({})
+                                        
+                                        for i in range(lead_count):
+                                            lead = leadership[i] if i < len(leadership) else {}
+                                            with st.expander(f"Leadership Role {i+1}", expanded=i==0):
+                                                lead_role = st.text_input("Role", value=lead.get('role', ''), key=f"lead_role_{resume_id}_{i}")
+                                                lead_org = st.text_input("Organization", value=lead.get('organization', ''), key=f"lead_org_{resume_id}_{i}")
+                                                lead_desc = st.text_area("Description", value=lead.get('description', ''), 
+                                                                         height=60, key=f"lead_desc_{resume_id}_{i}")
+                                                lead_impact = st.text_input("Impact/Metrics", value=lead.get('impact', ''), key=f"lead_impact_{resume_id}_{i}")
+                                                lead_start = st.text_input("Start Date", value=lead.get('start_date', ''), key=f"lead_start_{resume_id}_{i}")
+                                                lead_end = st.text_input("End Date", value=lead.get('end_date', ''), key=f"lead_end_{resume_id}_{i}")
+                                        
+                                        # Hobbies & Interests
+                                        st.markdown("##### Hobbies & Interests")
+                                        hobbies = resume.get('hobbies', [])
+                                        hobbies_text = ", ".join(hobbies) if hobbies else ""
+                                        edit_hobbies = st.text_input("Hobbies (comma-separated)", value=hobbies_text, 
+                                                                      key=f"hobbies_{resume_id}")
+                                        
+                                        # Professional Memberships
+                                        st.markdown("##### Professional Memberships")
+                                        memberships = resume.get('memberships', [])
+                                        memberships_text = ", ".join(memberships) if memberships else ""
+                                        edit_memberships = st.text_input("Memberships (comma-separated)", value=memberships_text, 
+                                                                         key=f"memberships_{resume_id}")
                                         
                                         col_save, col_cancel = st.columns(2)
                                         with col_save:
@@ -403,7 +581,7 @@ def display_homepage():
                                             
                                             # Collect experience data from form
                                             exp_list = []
-                                            for i in range(len(experience)):
+                                            for i in range(st.session_state[exp_count_key]):
                                                 exp_title = st.session_state.get(f"exp_title_{resume_id}_{i}", "")
                                                 exp_company = st.session_state.get(f"exp_company_{resume_id}_{i}", "")
                                                 exp_start = st.session_state.get(f"exp_start_{resume_id}_{i}", "")
@@ -422,24 +600,29 @@ def display_homepage():
                                             
                                             # Collect education data from form
                                             edu_list = []
-                                            for i in range(len(education)):
+                                            for i in range(st.session_state[edu_count_key]):
                                                 edu_degree = st.session_state.get(f"edu_degree_{resume_id}_{i}", "")
                                                 edu_institution = st.session_state.get(f"edu_institution_{resume_id}_{i}", "")
                                                 edu_field = st.session_state.get(f"edu_field_{resume_id}_{i}", "")
                                                 edu_year = st.session_state.get(f"edu_year_{resume_id}_{i}", "")
+                                                edu_cgpa = st.session_state.get(f"edu_cgpa_{resume_id}_{i}", "")
                                                 
                                                 if edu_degree or edu_institution:
-                                                    edu_list.append({
+                                                    edu_entry = {
                                                         "degree": edu_degree,
                                                         "institution": edu_institution,
                                                         "field": edu_field,
                                                         "year": edu_year
-                                                    })
+                                                    }
+                                                    # Save CGPA/GPA if provided
+                                                    if edu_cgpa and edu_cgpa.strip():
+                                                        edu_entry["gpa"] = edu_cgpa.strip()
+                                                    edu_list.append(edu_entry)
                                             update_data["education"] = edu_list
                                             
                                             # Collect projects data from form
                                             proj_list = []
-                                            for i in range(len(projects)):
+                                            for i in range(st.session_state[proj_count_key]):
                                                 proj_name = st.session_state.get(f"proj_name_{resume_id}_{i}", "")
                                                 proj_desc = st.session_state.get(f"proj_desc_{resume_id}_{i}", "")
                                                 proj_url = st.session_state.get(f"proj_url_{resume_id}_{i}", "")
@@ -454,7 +637,7 @@ def display_homepage():
                                             
                                             # Collect certifications data from form
                                             cert_list = []
-                                            for i in range(len(certifications)):
+                                            for i in range(st.session_state[cert_count_key]):
                                                 cert_name = st.session_state.get(f"cert_name_{resume_id}_{i}", "")
                                                 cert_org = st.session_state.get(f"cert_org_{resume_id}_{i}", "")
                                                 cert_date = st.session_state.get(f"cert_date_{resume_id}_{i}", "")
@@ -466,6 +649,79 @@ def display_homepage():
                                                         "date": cert_date
                                                     })
                                             update_data["certifications"] = cert_list
+                                            
+                                            # Collect awards data from form
+                                            awards_list = []
+                                            for i in range(st.session_state[award_count_key]):
+                                                award_text = st.session_state.get(f"award_{resume_id}_{i}", "")
+                                                if award_text.strip():
+                                                    awards_list.append(award_text.strip())
+                                            update_data["awards"] = awards_list
+                                            
+                                            # Collect publications data from form
+                                            pub_list = []
+                                            for i in range(st.session_state[pub_count_key]):
+                                                pub_title = st.session_state.get(f"pub_title_{resume_id}_{i}", "")
+                                                pub_authors = st.session_state.get(f"pub_authors_{resume_id}_{i}", "")
+                                                pub_venue = st.session_state.get(f"pub_venue_{resume_id}_{i}", "")
+                                                pub_date = st.session_state.get(f"pub_date_{resume_id}_{i}", "")
+                                                pub_url = st.session_state.get(f"pub_url_{resume_id}_{i}", "")
+                                                
+                                                if pub_title:
+                                                    pub_list.append({
+                                                        "title": pub_title,
+                                                        "authors": pub_authors,
+                                                        "venue": pub_venue,
+                                                        "date": pub_date,
+                                                        "url": pub_url
+                                                    })
+                                            update_data["publications"] = pub_list
+                                            
+                                            # Collect volunteer work data from form
+                                            vol_list = []
+                                            for i in range(st.session_state[vol_count_key]):
+                                                vol_org = st.session_state.get(f"vol_org_{resume_id}_{i}", "")
+                                                vol_role = st.session_state.get(f"vol_role_{resume_id}_{i}", "")
+                                                vol_location = st.session_state.get(f"vol_location_{resume_id}_{i}", "")
+                                                vol_start = st.session_state.get(f"vol_start_{resume_id}_{i}", "")
+                                                vol_end = st.session_state.get(f"vol_end_{resume_id}_{i}", "")
+                                                vol_desc = st.session_state.get(f"vol_desc_{resume_id}_{i}", "")
+                                                
+                                                if vol_org or vol_role:
+                                                    vol_list.append({
+                                                        "organization": vol_org,
+                                                        "role": vol_role,
+                                                        "location": vol_location,
+                                                        "start_date": vol_start,
+                                                        "end_date": vol_end,
+                                                        "description": vol_desc
+                                                    })
+                                            update_data["volunteer_work"] = vol_list
+                                            
+                                            # Collect leadership data from form
+                                            lead_list = []
+                                            for i in range(st.session_state[lead_count_key]):
+                                                lead_role = st.session_state.get(f"lead_role_{resume_id}_{i}", "")
+                                                lead_org = st.session_state.get(f"lead_org_{resume_id}_{i}", "")
+                                                lead_desc = st.session_state.get(f"lead_desc_{resume_id}_{i}", "")
+                                                lead_impact = st.session_state.get(f"lead_impact_{resume_id}_{i}", "")
+                                                lead_start = st.session_state.get(f"lead_start_{resume_id}_{i}", "")
+                                                lead_end = st.session_state.get(f"lead_end_{resume_id}_{i}", "")
+                                                
+                                                if lead_role or lead_org:
+                                                    lead_list.append({
+                                                        "role": lead_role,
+                                                        "organization": lead_org,
+                                                        "description": lead_desc,
+                                                        "impact": lead_impact,
+                                                        "start_date": lead_start,
+                                                        "end_date": lead_end
+                                                    })
+                                            update_data["leadership"] = lead_list
+                                            
+                                            # Collect hobbies and memberships
+                                            update_data["hobbies"] = [h.strip() for h in edit_hobbies.split(",") if h.strip()]
+                                            update_data["memberships"] = [m.strip() for m in edit_memberships.split(",") if m.strip()]
                                             
                                             # Send update request
                                             try:
@@ -489,9 +745,9 @@ def display_homepage():
                                         if cancel_clicked:
                                             st.session_state[edit_key] = False
                                             st.rerun()
-                                
-                                else:
-                                    # VIEW MODE - Display complete parsed information
+                            
+                            else:
+                                # VIEW MODE - Display complete parsed information
                                     # Personal Information
                                     col_p1, col_p2 = st.columns(2)
                                     with col_p1:
@@ -567,11 +823,14 @@ def display_homepage():
                                                 institution = edu.get('institution', 'N/A')
                                                 field = edu.get('field', '')
                                                 year = edu.get('year', '')
+                                                gpa = edu.get('gpa', '') or edu.get('cgpa', '')
                                                 
                                                 st.markdown(f"**{degree}**")
                                                 st.text(f"{institution}" + (f" - {field}" if field else ""))
                                                 if year:
                                                     st.caption(f"Year: {year}")
+                                                if gpa:
+                                                    st.caption(f"📊 CGPA/GPA: {gpa}")
                                                 st.markdown("---")
                                     
                                     # Projects - Complete list
@@ -631,19 +890,41 @@ def display_homepage():
                                         for vol in volunteer_work:
                                             if isinstance(vol, dict):
                                                 st.text(f"• {vol.get('organization', 'N/A')} - {vol.get('role', 'N/A')}")
-                            else:
-                                st.info("ℹ️ No user profile found for this resume. Profile will be created after parsing.")
+                                    
+                                    # Leadership
+                                    leadership = resume.get('leadership', [])
+                                    if leadership:
+                                        st.markdown(f"**Leadership ({len(leadership)}):**")
+                                        for lead in leadership:
+                                            if isinstance(lead, dict):
+                                                st.text(f"• {lead.get('role', 'N/A')} at {lead.get('organization', 'N/A')}")
+                                                if lead.get('impact'):
+                                                    st.caption(f"Impact: {lead.get('impact')}")
+                                    
+                                    # Hobbies
+                                    hobbies = resume.get('hobbies', [])
+                                    if hobbies:
+                                        st.markdown(f"**Hobbies:** {', '.join(hobbies)}")
+                                    
+                                    # Memberships
+                                    memberships = resume.get('memberships', [])
+                                    if memberships:
+                                        st.markdown(f"**Professional Memberships:** {', '.join(memberships)}")
+                                    
+                                    if not has_profile:
+                                        st.info("ℹ️ No profile data found. Click 'Edit' above to add information.")
                         
                         st.markdown("---")
                 
-                # Refresh button
-                col_refresh, col_upload = st.columns([1, 1])
+                # Navigation buttons
+                st.markdown("---")
+                col_refresh, col_upload = st.columns(2)
                 with col_refresh:
                     if st.button("🔄 Refresh List", use_container_width=True):
                         st.rerun()
                 with col_upload:
-                    if st.button("📤 Upload New Resume", use_container_width=True):
-                        st.session_state.page = "upload"
+                    if st.button("📤 Upload Another Resume", use_container_width=True):
+                        st.session_state.page = "📤 Upload Resume"
                         st.rerun()
         
         else:
@@ -669,7 +950,7 @@ def display_homepage():
 
 def display_upload_page():
     """Display upload page"""
-    st.markdown('<h1 class="main-header">📄 Resume Upload Service</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">📄 Auto Apply</h1>', unsafe_allow_html=True)
     st.markdown("### 📤 Upload New Resume")
     
     # File uploader
@@ -732,15 +1013,11 @@ def display_upload_page():
                         st.markdown(f"[Open in browser]({s3_url})")
                     
                     # Navigation buttons
-                    col_home, col_upload = st.columns(2)
-                    with col_home:
-                        if st.button("🏠 Go to Home", use_container_width=True):
-                            st.session_state.page = "home"
-                            st.rerun()
-                    with col_upload:
-                        if st.button("📤 Upload Another", use_container_width=True):
-                            st.rerun()
-                
+                    # Navigation button
+                    st.markdown("---")
+                    if st.button("🏠 Back to Home", use_container_width=True):
+                        st.session_state.page = "🏠 Home"
+                        st.rerun()
                 else:
                     # Error handling
                     error_detail = "Unknown error"
@@ -763,10 +1040,11 @@ def display_upload_page():
             except Exception as e:
                 st.error(f"❌ An error occurred: {str(e)}")
     
-    # Back to home button
+    # Navigation buttons at bottom of upload page
+    # Navigation button at bottom of upload page
     st.markdown("---")
-    if st.button("🏠 Back to Home", use_container_width=True):
-        st.session_state.page = "home"
+    if st.button("🏠 Back to Home", use_container_width=True, key="upload_bottom_home"):
+        st.session_state.page = "🏠 Home"
         st.rerun()
 
 
@@ -792,7 +1070,7 @@ def display_user_profiles_page():
                 st.info("📭 No user profiles found. Upload resumes to create profiles!")
                 st.markdown("---")
                 if st.button("📤 Go to Upload Page", use_container_width=True):
-                    st.session_state.page = "upload"
+                    st.session_state.page = "📤 Upload Resume"
                     st.rerun()
             else:
                 st.success(f"✅ Found {count} user profile(s)")
@@ -888,8 +1166,9 @@ def display_user_profiles_page():
                                             st.text(f"  📍 {edu.get('location')}")
                                         if edu.get('graduation_date'):
                                             st.text(f"  📅 Graduated: {edu.get('graduation_date')}")
-                                        if edu.get('gpa'):
-                                            st.text(f"  📊 GPA: {edu.get('gpa')}")
+                                        gpa = edu.get('gpa', '') or edu.get('cgpa', '')
+                                        if gpa:
+                                            st.text(f"  📊 CGPA/GPA: {gpa}")
                                         st.markdown("---")
                             
                             # Experience
@@ -1009,7 +1288,7 @@ def display_user_profiles_page():
                         st.rerun()
                 with col_home:
                     if st.button("🏠 Back to Home", use_container_width=True):
-                        st.session_state.page = "home"
+                        st.session_state.page = "🏠 Home"
                         st.rerun()
         
         else:
@@ -1034,14 +1313,14 @@ def display_user_profiles_page():
 
 
 # Main app logic
-if page == "🏠 Home":
+if st.session_state.page == "🏠 Home":
     display_homepage()
-elif page == "📤 Upload Resume":
+elif st.session_state.page == "📤 Upload Resume":
     display_upload_page()
 
 # Footer
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: #666;'>Resume Upload Service | Powered by FastAPI & Streamlit</div>",
+    "<div style='text-align: center; color: #666;'>Auto Apply | Powered by FastAPI & Streamlit</div>",
     unsafe_allow_html=True
 )
