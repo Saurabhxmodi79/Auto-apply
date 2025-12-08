@@ -1,9 +1,13 @@
 {
   "mcpServers": {
+    "cursor-ide-browser": {
+      "alwaysAllow": true
+    },
     "autoapply-profile-db": {
       "command": "uv",
       "args": ["run", "python", "mcp_server.py"],
-      "cwd": "/Users/modisaurabh/Code/Auto Apply"
+      "cwd": "/Users/modisaurabh/Code/Auto Apply",
+      "alwaysAllow": true
     }
   }
 }
