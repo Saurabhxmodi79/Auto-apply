@@ -221,6 +221,113 @@ async def list_tools() -> list[Tool]:
                 "required": ["email"]
             }
         ),
+        # ===== UPDATE TOOLS =====
+        Tool(
+            name="add_custom_answer",
+            description="Store a custom question-answer pair for future job applications. Use this when you encounter a question not covered in the existing profile data and need to remember the user's answer.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "description": "Email address of the user"
+                    },
+                    "question": {
+                        "type": "string",
+                        "description": "The question asked in the application"
+                    },
+                    "answer": {
+                        "type": "string",
+                        "description": "The user's answer to remember"
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Category of the question (e.g., 'work_authorization', 'relocation', 'salary', 'diversity', 'preferences')"
+                    }
+                },
+                "required": ["email", "question", "answer"]
+            }
+        ),
+        Tool(
+            name="update_profile_field",
+            description="Update a specific field in the user's profile. Use for simple field updates like location, phone, summary, etc.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "description": "Email address of the user"
+                    },
+                    "field_name": {
+                        "type": "string",
+                        "description": "Name of the field to update (e.g., 'location', 'phone', 'summary', 'github', 'linkedin', 'portfolio')"
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "New value for the field"
+                    }
+                },
+                "required": ["email", "field_name", "value"]
+            }
+        ),
+        Tool(
+            name="add_skill",
+            description="Add a new skill to the user's profile. Won't add duplicates.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "description": "Email address of the user"
+                    },
+                    "skill": {
+                        "type": "string",
+                        "description": "Skill to add"
+                    }
+                },
+                "required": ["email", "skill"]
+            }
+        ),
+        Tool(
+            name="add_language",
+            description="Add a language with proficiency level to the user's profile.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "description": "Email address of the user"
+                    },
+                    "language": {
+                        "type": "string",
+                        "description": "Language name"
+                    },
+                    "proficiency": {
+                        "type": "string",
+                        "description": "Proficiency level (e.g., 'Native', 'Fluent', 'Professional', 'Conversational', 'Basic')"
+                    }
+                },
+                "required": ["email", "language", "proficiency"]
+            }
+        ),
+        Tool(
+            name="get_custom_answers",
+            description="Get all custom question-answer pairs stored for a user. Returns answers by category.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "description": "Email address of the user"
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Optional: Filter by category"
+                    }
+                },
+                "required": ["email"]
+            }
+        ),
     ]
 
 
@@ -449,6 +556,191 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             return [TextContent(
                 type="text",
                 text=json.dumps(summary, indent=2)
+            )]
+        
+        # ===== UPDATE OPERATIONS =====
+        
+        elif name == "add_custom_answer":
+            email = arguments.get("email")
+            question = arguments.get("question")
+            answer = arguments.get("answer")
+            category = arguments.get("category", "general")
+            
+            if not email or not question or not answer:
+                return [TextContent(type="text", text="Error: email, question, and answer are required")]
+            
+            # Create custom answer entry
+            custom_answer = {
+                "question": question,
+                "answer": answer,
+                "category": category,
+                "added_at": datetime.now()
+            }
+            
+            # Update profile with custom answer
+            result = collection.update_one(
+                {"email": email},
+                {
+                    "$push": {"custom_answers": custom_answer}
+                }
+            )
+            
+            if result.modified_count > 0 or result.matched_count > 0:
+                return [TextContent(
+                    type="text",
+                    text=json.dumps({
+                        "status": "success",
+                        "message": f"Added custom answer for category '{category}'",
+                        "question": question,
+                        "answer": answer
+                    }, indent=2)
+                )]
+            else:
+                return [TextContent(type="text", text=f"Profile not found for email: {email}")]
+        
+        elif name == "update_profile_field":
+            email = arguments.get("email")
+            field_name = arguments.get("field_name")
+            value = arguments.get("value")
+            
+            if not email or not field_name or value is None:
+                return [TextContent(type="text", text="Error: email, field_name, and value are required")]
+            
+            # Update the field
+            result = collection.update_one(
+                {"email": email},
+                {"$set": {field_name: value}}
+            )
+            
+            if result.modified_count > 0 or result.matched_count > 0:
+                return [TextContent(
+                    type="text",
+                    text=json.dumps({
+                        "status": "success",
+                        "message": f"Updated field '{field_name}'",
+                        "field": field_name,
+                        "new_value": value
+                    }, indent=2)
+                )]
+            else:
+                return [TextContent(type="text", text=f"Profile not found for email: {email}")]
+        
+        elif name == "add_skill":
+            email = arguments.get("email")
+            skill = arguments.get("skill")
+            
+            if not email or not skill:
+                return [TextContent(type="text", text="Error: email and skill are required")]
+            
+            # Add skill if not already present (using $addToSet to avoid duplicates)
+            result = collection.update_one(
+                {"email": email},
+                {"$addToSet": {"skills": skill}}
+            )
+            
+            if result.modified_count > 0:
+                return [TextContent(
+                    type="text",
+                    text=json.dumps({
+                        "status": "success",
+                        "message": f"Added skill: {skill}"
+                    }, indent=2)
+                )]
+            elif result.matched_count > 0:
+                return [TextContent(
+                    type="text",
+                    text=json.dumps({
+                        "status": "unchanged",
+                        "message": f"Skill '{skill}' already exists"
+                    }, indent=2)
+                )]
+            else:
+                return [TextContent(type="text", text=f"Profile not found for email: {email}")]
+        
+        elif name == "add_language":
+            email = arguments.get("email")
+            language = arguments.get("language")
+            proficiency = arguments.get("proficiency", "Professional")
+            
+            if not email or not language:
+                return [TextContent(type="text", text="Error: email and language are required")]
+            
+            # Check if language already exists
+            profile = collection.find_one({"email": email})
+            if not profile:
+                return [TextContent(type="text", text=f"Profile not found for email: {email}")]
+            
+            existing_languages = profile.get("languages", [])
+            language_exists = any(
+                lang.get("language", "").lower() == language.lower() 
+                for lang in existing_languages
+            )
+            
+            if language_exists:
+                # Update proficiency if language exists
+                result = collection.update_one(
+                    {"email": email, "languages.language": {"$regex": f"^{language}$", "$options": "i"}},
+                    {"$set": {"languages.$.proficiency": proficiency}}
+                )
+                message = f"Updated proficiency for {language} to {proficiency}"
+            else:
+                # Add new language
+                result = collection.update_one(
+                    {"email": email},
+                    {"$push": {"languages": {"language": language, "proficiency": proficiency}}}
+                )
+                message = f"Added language: {language} ({proficiency})"
+            
+            return [TextContent(
+                type="text",
+                text=json.dumps({
+                    "status": "success",
+                    "message": message,
+                    "language": language,
+                    "proficiency": proficiency
+                }, indent=2)
+            )]
+        
+        elif name == "get_custom_answers":
+            email = arguments.get("email")
+            category = arguments.get("category")
+            
+            if not email:
+                return [TextContent(type="text", text="Error: email is required")]
+            
+            profile = collection.find_one({"email": email}, {"custom_answers": 1, "name": 1})
+            if not profile:
+                return [TextContent(type="text", text=f"No profile found for email: {email}")]
+            
+            custom_answers = profile.get("custom_answers", [])
+            
+            # Filter by category if provided
+            if category:
+                custom_answers = [
+                    ans for ans in custom_answers 
+                    if ans.get("category", "").lower() == category.lower()
+                ]
+            
+            # Group by category
+            grouped = {}
+            for ans in custom_answers:
+                cat = ans.get("category", "general")
+                if cat not in grouped:
+                    grouped[cat] = []
+                grouped[cat].append({
+                    "question": ans.get("question"),
+                    "answer": ans.get("answer"),
+                    "added_at": ans.get("added_at")
+                })
+            
+            return [TextContent(
+                type="text",
+                text=json.dumps({
+                    "name": profile.get("name"),
+                    "email": email,
+                    "custom_answers_by_category": grouped,
+                    "total_count": len(custom_answers)
+                }, indent=2, default=str)
             )]
         
         else:
